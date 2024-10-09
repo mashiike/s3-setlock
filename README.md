@@ -90,7 +90,7 @@ func main() {
 }
 ```
 
-Note: If Lock or Unlock fails, for example because you can't connect to DynamoDB, it will panic.  
+Note: If Lock or Unlock fails, for example because you can't put object to Amazon S3, it will panic.  
       If you don't want it to panic, use `LockWithError()` and `UnlockWithError()`. Alternatively, use the `WithNoPanic` option.
 
 more information see [go doc](https://godoc.org/github.com/mashiike/s3-setlock).
