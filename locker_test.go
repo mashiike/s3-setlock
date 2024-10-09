@@ -266,3 +266,37 @@ func TestNoPanic(t *testing.T) {
 	locker.Unlock()
 	require.Error(t, locker.LastError())
 }
+
+func TestDoubleLock(t *testing.T) {
+	defer func() {
+		err := s3setlock.Recover(recover())
+		require.NoError(t, err, "check no panic")
+	}()
+	client := &mockClient{}
+	locker, err := s3setlock.New(
+		"s3://s3-setlock-dummy/test/item4",
+		s3setlock.WithClient(client),
+		s3setlock.WithDelay(true),
+		s3setlock.WithLeaseDuration(200*time.Millisecond),
+		s3setlock.WithNoPanic(),
+	)
+	require.NoError(t, err)
+	var wg sync.WaitGroup
+	workerCount := 5
+	wg.Add(workerCount)
+	counter := 0
+	blockerCh := make(chan struct{})
+	for i := 0; i < workerCount; i++ {
+		go func() {
+			defer wg.Done()
+			<-blockerCh
+			locker.Lock()
+			defer locker.Unlock()
+			counter++
+			time.Sleep(500 * time.Millisecond)
+		}()
+	}
+	close(blockerCh)
+	wg.Wait()
+	require.Equal(t, 5, counter)
+}

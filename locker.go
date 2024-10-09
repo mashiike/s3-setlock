@@ -24,6 +24,7 @@ type Locker struct {
 
 	lastError     error
 	mu            sync.Mutex
+	cond          *sync.Cond
 	noPanic       bool
 	delay         bool
 	logger        *slog.Logger
@@ -88,7 +89,7 @@ func New(urlStr string, optFns ...func(*Options)) (*Locker, error) {
 		client = s3.NewFromConfig(awsCfg, s3Opts...)
 	}
 
-	return &Locker{
+	l := &Locker{
 		bucketName:    bucketName,
 		objectKey:     objectKey,
 		logger:        opts.Logger,
@@ -97,7 +98,9 @@ func New(urlStr string, optFns ...func(*Options)) (*Locker, error) {
 		client:        client,
 		leaseDuration: opts.LeaseDuration,
 		defaultCtx:    opts.ctx,
-	}, nil
+	}
+	l.cond = sync.NewCond(&l.mu)
+	return l, nil
 }
 
 var (
@@ -144,8 +147,11 @@ func (l *Locker) LockWithError(ctx context.Context) (bool, error) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	l.logger.DebugContext(ctx, "start LockWithError")
-	if l.locked {
-		return true, errors.New("aleady lock granted")
+	for l.locked {
+		if !l.delay {
+			return true, errors.New("aleady lock granted")
+		}
+		l.cond.Wait()
 	}
 	lockGranted, err := l.tryLock(ctx)
 	if err != nil {
@@ -306,6 +312,7 @@ func (l *Locker) UnlockWithError(ctx context.Context) error {
 	}
 	l.locked = false
 	l.lockedObject = nil
+	l.cond.Broadcast()
 	return nil
 }
 
