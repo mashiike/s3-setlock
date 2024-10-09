@@ -1,0 +1,39 @@
+version: 2
+
+before:
+  hooks:
+    - go mod download
+
+builds:
+  - env:
+      - CGO_ENABLED=0
+    dir: ./cmd/s3-setlock
+    main: main.go
+    binary: s3-setlock
+    ldflags:
+      - -s -w
+    goos:
+      - linux
+      - windows
+      - darwin
+    goarch:
+      - amd64
+      - arm64
+
+release:
+  prerelease: false
+
+archives:
+  - format: tar.gz
+    files:
+      - LICENSE
+      - README.md
+      - CHANGELOG.md
+      - CREDITS
+
+changelog:
+  sort: asc
+  filters:
+    exclude:
+      - "^docs:"
+      - "^test:"
