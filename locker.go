@@ -25,7 +25,7 @@ type Locker struct {
 	lastError     error
 	mu            sync.Mutex
 	cond          *sync.Cond
-	noPanic       bool
+	NoBailout     bool
 	delay         bool
 	logger        *slog.Logger
 	leaseDuration time.Duration
@@ -93,7 +93,7 @@ func New(urlStr string, optFns ...func(*Options)) (*Locker, error) {
 		bucketName:    bucketName,
 		objectKey:     objectKey,
 		logger:        opts.Logger,
-		noPanic:       opts.NoPanic,
+		NoBailout:     opts.NoBailout,
 		delay:         opts.Delay,
 		client:        client,
 		leaseDuration: opts.LeaseDuration,
@@ -412,23 +412,50 @@ type bailoutErr struct {
 	err error
 }
 
+func (b bailoutErr) Error() string {
+	return b.err.Error()
+}
+
+func (b bailoutErr) Unwrap() error {
+	return b.err
+}
+
 func (l *Locker) bailout(err error) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	l.lastError = err
-	if !l.noPanic {
+	if !l.NoBailout {
 		panic(bailoutErr{err: err})
 	}
 }
 
-// Recover for Lock() and Unlock() panic
-func Recover(e interface{}) error {
-	if e != nil {
-		b, ok := e.(bailoutErr)
-		if !ok {
-			panic(e)
-		}
-		return b.err
+// AsBailout returns bailout errors
+// example:
+//
+//	defer func() {
+//		if err, ok := s3setlock.AsBailout(recover()); ok {
+//			log.Fatal(err)
+//		}
+//	}()
+func AsBailout(e interface{}) (error, bool) {
+	b, ok := e.(bailoutErr)
+	if !ok {
+		return nil, false
 	}
-	return nil
+	return b.err, true
+}
+
+// HandleBailout executes the provided function and recovers from any bailout errors,
+// returning the bailout error if one occurs.
+func HandleBailout(fn func() error) (err error) {
+	defer func() {
+		if e := recover(); e != nil {
+			if b, ok := AsBailout(e); ok {
+				err = b
+			} else {
+				panic(e)
+			}
+		}
+	}()
+	return fn()
 }

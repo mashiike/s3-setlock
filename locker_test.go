@@ -24,8 +24,9 @@ import (
 func runE2ETest(t *testing.T, bucketName string, client s3setlock.S3Client) {
 	t.Parallel()
 	defer func() {
-		err := s3setlock.Recover(recover())
-		require.NoError(t, err)
+		if err, ok := s3setlock.AsBailout(recover()); ok {
+			require.NoError(t, err)
+		}
 	}()
 	var buf bytes.Buffer
 	logger := slog.New(slog.NewJSONHandler(&buf, &slog.HandlerOptions{Level: slog.LevelDebug}))
@@ -36,36 +37,36 @@ func runE2ETest(t *testing.T, bucketName string, client s3setlock.S3Client) {
 	workerNum := 10
 	countMax := 10
 	f1 := func(workerID int, l sync.Locker) {
-		defer func() {
-			err := s3setlock.Recover(recover())
-			require.NoError(t, err)
-		}()
-		l.Lock()
-		defer l.Unlock()
-		logger.Info("start f1", "worker_id", workerID)
-		for i := 0; i < countMax; i++ {
-			total1 += 1
-			time.Sleep(10 * time.Millisecond)
-		}
-		lastTime1 = time.Now()
-		logger.Info("finish f1", "worker_id", workerID)
+		err := s3setlock.HandleBailout(func() error {
+			l.Lock()
+			defer l.Unlock()
+			logger.Info("start f1", "worker_id", workerID)
+			for i := 0; i < countMax; i++ {
+				total1 += 1
+				time.Sleep(10 * time.Millisecond)
+			}
+			lastTime1 = time.Now()
+			logger.Info("finish f1", "worker_id", workerID)
+			return nil
+		})
+		require.NoError(t, err)
 	}
 	f2 := func(workerID int, l sync.Locker) {
-		defer func() {
-			err := s3setlock.Recover(recover())
-			require.NoError(t, err)
-		}()
-		l.Lock()
-		defer l.Unlock()
-		logger.Info("start f2", "worker_id", workerID)
+		err := s3setlock.HandleBailout(func() error {
+			l.Lock()
+			defer l.Unlock()
+			logger.Info("start f2", "worker_id", workerID)
 
-		for i := 0; i < countMax; i++ {
-			total2 += 1
-			time.Sleep(20 * time.Millisecond)
-		}
-		lastTime2 = time.Now()
+			for i := 0; i < countMax; i++ {
+				total2 += 1
+				time.Sleep(20 * time.Millisecond)
+			}
+			lastTime2 = time.Now()
 
-		logger.Info("finish f2", "worker_id", workerID)
+			logger.Info("finish f2", "worker_id", workerID)
+			return nil
+		})
+		require.NoError(t, err)
 	}
 	opts := []func(*s3setlock.Options){
 		s3setlock.WithLogger(logger),
@@ -238,10 +239,11 @@ func TestE2E__WithMock(t *testing.T) {
 	runE2ETest(t, "s3-setlock-dummy", &mockClient{})
 }
 
-func TestNoPanic(t *testing.T) {
+func TestNoBailout(t *testing.T) {
 	defer func() {
-		err := s3setlock.Recover(recover())
-		require.NoError(t, err, "check no panic")
+		if err, ok := s3setlock.AsBailout(recover()); ok {
+			require.NoError(t, err, "check no panic")
+		}
 	}()
 	// aleady locked client
 	client := &mockClient{
@@ -255,7 +257,7 @@ func TestNoPanic(t *testing.T) {
 	locker, err := s3setlock.New(
 		"s3://s3-setlock-dummy/test/item3",
 		s3setlock.WithClient(client),
-		s3setlock.WithNoPanic(),
+		s3setlock.WithNoBailout(),
 		s3setlock.WithDelay(false),
 		s3setlock.WithLeaseDuration(24*time.Hour),
 	)
@@ -269,8 +271,9 @@ func TestNoPanic(t *testing.T) {
 
 func TestDoubleLock(t *testing.T) {
 	defer func() {
-		err := s3setlock.Recover(recover())
-		require.NoError(t, err, "check no panic")
+		if err, ok := s3setlock.AsBailout(recover()); ok {
+			require.NoError(t, err, "check no panic")
+		}
 	}()
 	client := &mockClient{}
 	locker, err := s3setlock.New(
@@ -278,7 +281,7 @@ func TestDoubleLock(t *testing.T) {
 		s3setlock.WithClient(client),
 		s3setlock.WithDelay(true),
 		s3setlock.WithLeaseDuration(200*time.Millisecond),
-		s3setlock.WithNoPanic(),
+		s3setlock.WithNoBailout(),
 	)
 	require.NoError(t, err)
 	var wg sync.WaitGroup

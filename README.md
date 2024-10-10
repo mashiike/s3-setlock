@@ -77,9 +77,15 @@ func main() {
 		go func() {
 			defer wg.Done()
 			for i := 0; i < 10; i++ {
-				locker.Lock()
-				counter++
-				locker.Unlock()
+				err := s3setlock.HandleBailout(func() error {
+					locker.Lock()
+					counter++
+					locker.Unlock()
+					return nil
+				})
+				if err != nil {
+					log.Fatal(err)
+				}
 			}
 		}()
 	}
@@ -91,7 +97,7 @@ func main() {
 ```
 
 Note: If Lock or Unlock fails, for example because you can't put object to Amazon S3, it will panic.  
-      If you don't want it to panic, use `LockWithError()` and `UnlockWithError()`. Alternatively, use the `WithNoPanic` option.
+      If you don't want it to panic, use `LockWithError()` and `UnlockWithError()`. Alternatively, use the `WithNoBailout` option.
 
 more information see [go doc](https://godoc.org/github.com/mashiike/s3-setlock).
 

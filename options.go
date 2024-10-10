@@ -30,7 +30,7 @@ func newOptions() *Options {
 }
 
 type Options struct {
-	NoPanic       bool
+	NoBailout     bool
 	Logger        *slog.Logger
 	Delay         bool
 	Client        S3Client
@@ -74,11 +74,11 @@ func WithContext(ctx context.Context) func(opts *Options) {
 	}
 }
 
-// WithNoPanic changes the behavior so that it does not panic if an error occurs in the Lock () and Unlock () functions.
-// Check the LastErr () function to see if an error has occurred when WithNoPanic is specified.
-func WithNoPanic() func(opts *Options) {
+// WithNoBailout changes the behavior so that it does not panic if an error occurs in the Lock () and Unlock () functions.
+// Check the LastErr () function to see if an error has occurred when WithNoBailout is specified.
+func WithNoBailout() func(opts *Options) {
 	return func(opts *Options) {
-		opts.NoPanic = true
+		opts.NoBailout = true
 	}
 }
 
