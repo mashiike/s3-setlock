@@ -24,7 +24,8 @@ import (
 func runE2ETest(t *testing.T, bucketName string, client s3setlock.S3Client) {
 	t.Parallel()
 	defer func() {
-		if err, ok := s3setlock.AsBailout(recover()); ok {
+		var err error
+		if s3setlock.AsBailout(recover(), &err) {
 			require.NoError(t, err)
 		}
 	}()
@@ -241,7 +242,8 @@ func TestE2E__WithMock(t *testing.T) {
 
 func TestNoBailout(t *testing.T) {
 	defer func() {
-		if err, ok := s3setlock.AsBailout(recover()); ok {
+		var err error
+		if s3setlock.AsBailout(recover(), &err) {
 			require.NoError(t, err, "check no panic")
 		}
 	}()
@@ -271,7 +273,8 @@ func TestNoBailout(t *testing.T) {
 
 func TestDoubleLock(t *testing.T) {
 	defer func() {
-		if err, ok := s3setlock.AsBailout(recover()); ok {
+		var err error
+		if s3setlock.AsBailout(recover(), &err) {
 			require.NoError(t, err, "check no panic")
 		}
 	}()

@@ -433,16 +433,24 @@ func (l *Locker) bailout(err error) {
 // example:
 //
 //	defer func() {
-//		if err, ok := s3setlock.AsBailout(recover()); ok {
+//		var err error
+//		if s3setlock.AsBailout(recover(),&err) {
 //			log.Fatal(err)
 //		}
 //	}()
-func AsBailout(e interface{}) (error, bool) {
-	b, ok := e.(bailoutErr)
-	if !ok {
-		return nil, false
+func AsBailout(result interface{}, target *error) bool {
+	if result == nil {
+		return false
 	}
-	return b.err, true
+	b, ok := result.(bailoutErr)
+	if !ok {
+		return false
+	}
+	if target == nil {
+		panic("s3setlock: AsBailout() target must not be nil")
+	}
+	*target = b.err
+	return true
 }
 
 // HandleBailout executes the provided function and recovers from any bailout errors,
@@ -450,9 +458,7 @@ func AsBailout(e interface{}) (error, bool) {
 func HandleBailout(fn func() error) (err error) {
 	defer func() {
 		if e := recover(); e != nil {
-			if b, ok := AsBailout(e); ok {
-				err = b
-			} else {
+			if !AsBailout(e, &err) {
 				panic(e)
 			}
 		}
